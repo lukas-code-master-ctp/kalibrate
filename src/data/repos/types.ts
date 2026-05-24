@@ -8,6 +8,7 @@
  * permitiendo swap mecánico entre implementaciones.
  */
 
+import type { WeightLog } from '@/core/model/types';
 import type { Goal, User } from '@/core/model/user';
 
 /** Datos de creación del usuario (sin id, timestamps autogenerados). */
@@ -31,4 +32,22 @@ export interface GoalRepo {
   setActive(input: CreateGoalInput): Promise<Goal>;
   /** Histórico (más reciente primero). */
   listAll(userId: string): Promise<readonly Goal[]>;
+}
+
+/** Una medición de peso con metadata persistible. */
+export interface StoredWeightLog extends WeightLog {
+  id: string;
+}
+
+export type CreateWeightLogInput = Omit<StoredWeightLog, 'id' | 'isOutlier'>;
+
+export interface WeightLogRepo {
+  /** Lista cronológica ascendente. */
+  listAll(): Promise<readonly StoredWeightLog[]>;
+  /** Última medición, si existe. */
+  getLatest(): Promise<StoredWeightLog | null>;
+  /** Mediciones de un día específico (00:00 a 23:59 en local). */
+  listForDay(date: Date): Promise<readonly StoredWeightLog[]>;
+  add(input: CreateWeightLogInput): Promise<StoredWeightLog>;
+  delete(id: string): Promise<void>;
 }

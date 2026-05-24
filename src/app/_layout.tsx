@@ -4,17 +4,20 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useUserStore } from '@/stores/user';
+import { useWeightStore } from '@/stores/weight';
 import { colors } from '@/ui/theme';
 
 export default function RootLayout() {
   const loadUser = useUserStore((s) => s.loadUser);
-  const isLoaded = useUserStore((s) => s.isLoaded);
+  const isUserLoaded = useUserStore((s) => s.isLoaded);
+  const loadWeights = useWeightStore((s) => s.loadLogs);
 
   useEffect(() => {
     void loadUser();
-  }, [loadUser]);
+    void loadWeights();
+  }, [loadUser, loadWeights]);
 
-  if (!isLoaded) {
+  if (!isUserLoaded) {
     return (
       <SafeAreaProvider>
         <View
@@ -36,6 +39,7 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="onboarding" />
       </Stack>
     </SafeAreaProvider>

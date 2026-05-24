@@ -27,6 +27,7 @@ export interface WeightLog {
   loggedAt: Date;
   weightKg: number;
   isOutlier?: boolean;
+  note?: string;
 }
 
 /** Una medición suavizada con su contraparte cruda. */
