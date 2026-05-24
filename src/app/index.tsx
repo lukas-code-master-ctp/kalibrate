@@ -1,98 +1,96 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Redirect } from 'expo-router';
+import { useMemo } from 'react';
+import { View } from 'react-native';
+import { ageInYears } from '@/core/model/user';
+import { priorCredibleInterval, priorTDEE } from '@/core/model/priors';
+import { useUserStore } from '@/stores/user';
+import { Body, BottomBar, Button, Hint, Screen, Subtitle, Title } from '@/ui/components';
+import { colors, spacing } from '@/ui/theme';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+const SEX_LABELS = { male: 'Hombre', female: 'Mujer' } as const;
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+const ACTIVITY_LABELS = {
+  sedentary: 'Sedentario',
+  light: 'Ligero',
+  moderate: 'Moderado',
+  high: 'Alto',
+  very_high: 'Muy alto',
+} as const;
 
 export default function HomeScreen() {
+  const user = useUserStore((s) => s.user);
+  const clearUser = useUserStore((s) => s.clearUser);
+
+  const prior = useMemo(() => {
+    if (!user) return null;
+    return priorTDEE({
+      sex: user.biologicalSex,
+      weightKg: user.initialWeightKg,
+      heightCm: user.heightCm,
+      ageYears: ageInYears(user.birthDate),
+      activityLevel: user.activityLevel,
+      bodyFatPct: user.bodyFatPct,
+    });
+  }, [user]);
+
+  if (!user) {
+    return <Redirect href="/onboarding" />;
+  }
+
+  const ci = prior ? priorCredibleInterval(prior) : null;
+  const ageYearsRounded = Math.floor(ageInYears(user.birthDate));
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <Screen>
+      <Title>Hola 👋</Title>
+      <Body>Tu perfil quedó guardado localmente.</Body>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+      <View style={{ height: spacing.xl }} />
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+      <Subtitle>Tu TDEE inicial</Subtitle>
+      {prior && ci ? (
+        <View>
+          <Body>
+            Estimación: <Body>~{Math.round(prior.mean)} kcal/día</Body>
+          </Body>
+          <Body>
+            Rango probable (80%): {Math.round(ci.low)} – {Math.round(ci.high)} kcal/día
+          </Body>
+          <View style={{ height: spacing.sm }} />
+          <Hint>
+            Esta es solo una estimación inicial usando{' '}
+            {prior.method === 'katch-mcardle' ? 'Katch-McArdle' : 'Mifflin-St Jeor'}. Una vez
+            tengamos al menos 14 días de datos de peso e ingesta, vamos a calibrar este número a tu
+            cuerpo real. Por ahora: confianza baja, etiqueta &quot;calibrando&quot;.
+          </Hint>
+        </View>
+      ) : null}
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      <View style={{ height: spacing.xl }} />
+
+      <Subtitle>Perfil</Subtitle>
+      <Body>
+        {SEX_LABELS[user.biologicalSex]} · {ageYearsRounded} años · {user.heightCm} cm ·{' '}
+        {user.initialWeightKg} kg · actividad {ACTIVITY_LABELS[user.activityLevel]}
+      </Body>
+      {user.bodyFatPct != null ? <Body>{user.bodyFatPct}% de grasa corporal</Body> : null}
+
+      <View style={{ flex: 1, minHeight: spacing.xxl }} />
+
+      <BottomBar>
+        <Button
+          label="Borrar perfil (dev)"
+          variant="ghost"
+          onPress={() => {
+            void clearUser();
+          }}
+        />
+        <Hint>
+          Próximo sprint (S2): registro de peso diario con suavizado y gráfico de tendencia.
+        </Hint>
+      </BottomBar>
+
+      <View style={{ height: spacing.md, backgroundColor: colors.bg }} />
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
-});
