@@ -2,9 +2,8 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { suggestedDailyIntake, suggestedDailyProteinG } from '@/core/model/aggregation';
-import { ageInYears } from '@/core/model/user';
-import { priorCredibleInterval, priorTDEE } from '@/core/model/priors';
-import { useFoodStore, selectTodayEntries, selectTodayTotals } from '@/stores/food';
+import { useCalibration, calibrationCopy } from '@/hooks/useCalibration';
+import { selectTodayEntries, selectTodayTotals, useFoodStore } from '@/stores/food';
 import { useUserStore } from '@/stores/user';
 import { selectLatestRaw, selectLatestSmoothed, useWeightStore } from '@/stores/weight';
 import { Body, Button, Field, Hint, Screen, Subtitle, Title } from '@/ui/components';
@@ -36,6 +35,7 @@ export default function TodayScreen() {
   const todayEntries = useFoodStore(selectTodayEntries);
   const todayTotals = useFoodStore(selectTodayTotals);
   const deleteEntry = useFoodStore((s) => s.deleteEntry);
+  const calibration = useCalibration();
 
   const todayLogs = useMemo(
     () => allLogs.filter((log) => sameLocalDay(log.loggedAt, new Date())),
@@ -66,23 +66,10 @@ export default function TodayScreen() {
     return n;
   }, [weightStr]);
 
-  const prior = useMemo(() => {
-    if (!user) return null;
-    const weightForPrior = latestSmoothed ?? user.initialWeightKg;
-    return priorTDEE({
-      sex: user.biologicalSex,
-      weightKg: weightForPrior,
-      heightCm: user.heightCm,
-      ageYears: ageInYears(user.birthDate),
-      activityLevel: user.activityLevel,
-      bodyFatPct: user.bodyFatPct,
-    });
-  }, [user, latestSmoothed]);
-
   const dailyTargetKcal = useMemo(() => {
-    if (!prior || targetRate === null) return null;
-    return suggestedDailyIntake(prior.mean, targetRate);
-  }, [prior, targetRate]);
+    if (!calibration || targetRate === null) return null;
+    return suggestedDailyIntake(calibration.mean, targetRate);
+  }, [calibration, targetRate]);
 
   const dailyTargetProteinG = useMemo(() => {
     if (!user || targetRate === null) return null;
@@ -119,14 +106,14 @@ export default function TodayScreen() {
     ]);
   }
 
-  const ci = prior ? priorCredibleInterval(prior) : null;
   const hasLoggedToday = todayLogs.length > 0;
-  const totalLogs = allLogs.length;
 
   const kcalRemaining =
     dailyTargetKcal !== null ? Math.round(dailyTargetKcal - todayTotals.kcal) : null;
   const proteinRemaining =
     dailyTargetProteinG !== null ? Math.round(dailyTargetProteinG - todayTotals.proteinG) : null;
+
+  const copy = calibration ? calibrationCopy(calibration) : null;
 
   return (
     <Screen>
@@ -227,22 +214,37 @@ export default function TodayScreen() {
         )}
       </View>
 
-      <View style={styles.card}>
-        <Subtitle>TDEE estimado</Subtitle>
-        {prior && ci ? (
-          <>
-            <Body>
-              <Text style={styles.bold}>~{Math.round(prior.mean)} kcal/día</Text>
-            </Body>
+      {calibration && copy ? (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Subtitle>TDEE estimado</Subtitle>
+            <Text
+              style={[
+                styles.confidenceBadge,
+                calibration.method === 'bayesian'
+                  ? styles.confidenceBayesian
+                  : styles.confidencePrior,
+              ]}
+            >
+              {copy.headline}
+            </Text>
+          </View>
+          <Body>
+            <Text style={styles.bold}>~{Math.round(calibration.mean)} kcal/día</Text>
+          </Body>
+          <Body>
+            Rango probable (80%): {Math.round(calibration.ciLow)} – {Math.round(calibration.ciHigh)}{' '}
+            kcal/día
+          </Body>
+          <Hint>{copy.detail}</Hint>
+          {calibration.method === 'bayesian' ? (
             <Hint>
-              Rango probable (80%): {Math.round(ci.low)} – {Math.round(ci.high)} kcal/día.
-              {totalLogs < 14
-                ? ` Calibrando: ${totalLogs}/14 días.`
-                : ' Calibrando con tus datos reales.'}
+              Observaciones efectivas: {calibration.effectiveN.toFixed(1)} (las más recientes pesan
+              más).
             </Hint>
-          </>
-        ) : null}
-      </View>
+          ) : null}
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -292,5 +294,21 @@ const styles = StyleSheet.create({
   bold: {
     fontWeight: '700',
     fontSize: fontSizes.lg,
+  },
+  confidenceBadge: {
+    fontSize: fontSizes.xs,
+    fontWeight: '700',
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+    overflow: 'hidden',
+  },
+  confidencePrior: {
+    backgroundColor: colors.bgMuted,
+    color: colors.textMuted,
+  },
+  confidenceBayesian: {
+    backgroundColor: '#EFF6FF',
+    color: colors.primary,
   },
 });
