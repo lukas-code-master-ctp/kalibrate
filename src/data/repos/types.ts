@@ -8,6 +8,7 @@
  * permitiendo swap mecánico entre implementaciones.
  */
 
+import type { FoodEntry } from '@/core/model/food';
 import type { WeightLog } from '@/core/model/types';
 import type { Goal, User } from '@/core/model/user';
 
@@ -49,5 +50,16 @@ export interface WeightLogRepo {
   /** Mediciones de un día específico (00:00 a 23:59 en local). */
   listForDay(date: Date): Promise<readonly StoredWeightLog[]>;
   add(input: CreateWeightLogInput): Promise<StoredWeightLog>;
+  delete(id: string): Promise<void>;
+}
+
+export type CreateFoodEntryInput = Omit<FoodEntry, 'id'>;
+
+export interface FoodEntryRepo {
+  listAll(): Promise<readonly FoodEntry[]>;
+  listForDay(date: Date): Promise<readonly FoodEntry[]>;
+  /** Rango por fecha local (ambas inclusive). */
+  listForRange(startDate: Date, endDate: Date): Promise<readonly FoodEntry[]>;
+  add(input: CreateFoodEntryInput): Promise<FoodEntry>;
   delete(id: string): Promise<void>;
 }

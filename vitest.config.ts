@@ -3,12 +3,12 @@ import path from 'node:path';
 
 export default defineConfig({
   test: {
-    include: ['src/core/**/*.{test,spec}.ts'],
+    include: ['src/{core,services}/**/*.{test,spec}.ts'],
     environment: 'node',
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      include: ['src/core/**/*.ts'],
+      include: ['src/core/**/*.ts', 'src/services/**/*.ts'],
       exclude: ['**/*.test.ts', '**/*.spec.ts', '**/types.ts', '**/index.ts'],
       thresholds: {
         lines: 80,
