@@ -10,6 +10,8 @@ import { selectLatestRaw, selectLatestSmoothed, useWeightStore } from '@/stores/
 import { Body, Button, Field, Hint, Screen, Subtitle, Title } from '@/ui/components';
 import { CycleCard } from '@/ui/cycleCard';
 import { FoodEntryRow, FoodListEmpty } from '@/ui/foodList';
+import { WeeklyStatusBanner } from '@/ui/weeklyStatusBanner';
+import { useWeeklyStatus } from '@/hooks/useWeeklyStatus';
 import { goalRepo } from '@/data/repos';
 import { colors, fontSizes, radii, spacing } from '@/ui/theme';
 
@@ -18,6 +20,32 @@ function sameLocalDay(a: Date, b: Date): boolean {
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
+  );
+}
+
+interface NonConcernHintProps {
+  rawKg: number;
+  smoothedKg: number;
+  bandKg: number;
+}
+
+function NonConcernHint({ rawKg, smoothedKg, bandKg }: NonConcernHintProps) {
+  const deviation = rawKg - smoothedKg;
+  const insideBand = Math.abs(deviation) <= bandKg;
+  if (insideBand) {
+    return (
+      <Hint>
+        Hoy {rawKg.toFixed(1)} kg está dentro de tu banda de fluctuación normal (±
+        {bandKg.toFixed(2)} kg alrededor de tu tendencia). Sin acción necesaria.
+      </Hint>
+    );
+  }
+  return (
+    <Hint>
+      Hoy {rawKg.toFixed(1)} kg está fuera de tu banda normal por {Math.abs(deviation).toFixed(2)}{' '}
+      kg, pero la tendencia ({smoothedKg.toFixed(1)} kg) sigue siendo lo que importa. Es probable
+      ruido — agua, glucógeno, comida en el intestino.
+    </Hint>
   );
 }
 
@@ -38,6 +66,8 @@ export default function TodayScreen() {
   const todayTotals = useFoodStore(selectTodayTotals);
   const deleteEntry = useFoodStore((s) => s.deleteEntry);
   const result = useCalibration();
+  const weeklyEvaluation = useWeeklyStatus();
+  const bandKg = useWeightStore((s) => s.smoothing.historicalSdKg);
 
   const todayLogs = useMemo(
     () => allLogs.filter((log) => sameLocalDay(log.loggedAt, new Date())),
@@ -123,6 +153,8 @@ export default function TodayScreen() {
   return (
     <Screen>
       <Title>Hoy</Title>
+
+      {weeklyEvaluation ? <WeeklyStatusBanner evaluation={weeklyEvaluation} /> : null}
 
       <View style={[styles.card, { marginTop: spacing.md }]}>
         <View style={styles.cardHeader}>
@@ -211,10 +243,11 @@ export default function TodayScreen() {
               Tendencia suavizada: <Text style={styles.bold}>{latestSmoothed.toFixed(1)} kg</Text>
             </Body>
             <Body>Última medición cruda: {latestRaw.weightKg.toFixed(1)} kg</Body>
-            <Hint>
-              La tendencia es la señal. El número de hoy es ruido — agua, glucógeno, sodio, comida
-              en el intestino.
-            </Hint>
+            <NonConcernHint
+              rawKg={latestRaw.weightKg}
+              smoothedKg={latestSmoothed}
+              bandKg={bandKg}
+            />
           </>
         ) : (
           <Body>Registra tu primer peso para empezar a ver tu tendencia.</Body>

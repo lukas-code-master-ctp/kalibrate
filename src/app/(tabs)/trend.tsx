@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { SmoothedWeightPoint } from '@/core/model/types';
+import { learnWeekdayPattern, weekendDelta } from '@/core/model/weekdayPattern';
+import { useFoodStore } from '@/stores/food';
 import { useWeightStore } from '@/stores/weight';
 import { Body, Hint, Screen, Subtitle, Title } from '@/ui/components';
 import { WeightTrendChart } from '@/ui/charts/WeightTrendChart';
+import { WeekdayPatternView } from '@/ui/weekdayPatternView';
 import { colors, fontSizes, radii, spacing } from '@/ui/theme';
 
 type WindowDays = 30 | 60 | 90 | 'all';
@@ -50,10 +53,13 @@ export default function TrendScreen() {
   const { width } = useWindowDimensions();
   const allPoints = useWeightStore((s) => s.smoothing.points);
   const bandKg = useWeightStore((s) => s.smoothing.historicalSdKg);
+  const entries = useFoodStore((s) => s.entries);
 
   const [window, setWindow] = useState<WindowDays>(60);
   const points = useMemo(() => filterPoints(allPoints, window), [allPoints, window]);
   const trend = useMemo(() => describeTrend(points), [points]);
+  const weekdayPattern = useMemo(() => learnWeekdayPattern(entries), [entries]);
+  const wkndDelta = useMemo(() => weekendDelta(weekdayPattern), [weekdayPattern]);
 
   const chartWidth = width - spacing.lg * 2;
   const chartHeight = 240;
@@ -112,6 +118,8 @@ export default function TrendScreen() {
           hoy cae dentro de la banda, es fluctuación normal — sin acción necesaria.
         </Hint>
       </View>
+
+      <WeekdayPatternView pattern={weekdayPattern} weekendDeltaKcal={wkndDelta} />
 
       <View style={styles.card}>
         <Subtitle>Por qué la tendencia importa más que el día</Subtitle>
