@@ -2,11 +2,13 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { suggestedDailyIntake, suggestedDailyProteinG } from '@/core/model/aggregation';
+import { isCycleApplicable } from '@/core/model/cycle';
 import { useCalibration, calibrationCopy } from '@/hooks/useCalibration';
 import { selectTodayEntries, selectTodayTotals, useFoodStore } from '@/stores/food';
 import { useUserStore } from '@/stores/user';
 import { selectLatestRaw, selectLatestSmoothed, useWeightStore } from '@/stores/weight';
 import { Body, Button, Field, Hint, Screen, Subtitle, Title } from '@/ui/components';
+import { CycleCard } from '@/ui/cycleCard';
 import { FoodEntryRow, FoodListEmpty } from '@/ui/foodList';
 import { goalRepo } from '@/data/repos';
 import { colors, fontSizes, radii, spacing } from '@/ui/theme';
@@ -35,7 +37,7 @@ export default function TodayScreen() {
   const todayEntries = useFoodStore(selectTodayEntries);
   const todayTotals = useFoodStore(selectTodayTotals);
   const deleteEntry = useFoodStore((s) => s.deleteEntry);
-  const calibration = useCalibration();
+  const result = useCalibration();
 
   const todayLogs = useMemo(
     () => allLogs.filter((log) => sameLocalDay(log.loggedAt, new Date())),
@@ -66,10 +68,12 @@ export default function TodayScreen() {
     return n;
   }, [weightStr]);
 
+  const effectiveTDEE = result?.effectiveTDEE ?? null;
+
   const dailyTargetKcal = useMemo(() => {
-    if (!calibration || targetRate === null) return null;
-    return suggestedDailyIntake(calibration.mean, targetRate);
-  }, [calibration, targetRate]);
+    if (effectiveTDEE === null || targetRate === null) return null;
+    return suggestedDailyIntake(effectiveTDEE, targetRate);
+  }, [effectiveTDEE, targetRate]);
 
   const dailyTargetProteinG = useMemo(() => {
     if (!user || targetRate === null) return null;
@@ -113,7 +117,8 @@ export default function TodayScreen() {
   const proteinRemaining =
     dailyTargetProteinG !== null ? Math.round(dailyTargetProteinG - todayTotals.proteinG) : null;
 
-  const copy = calibration ? calibrationCopy(calibration) : null;
+  const copy = result ? calibrationCopy(result.calibration) : null;
+  const showCycleCard = user.biologicalSex === 'female' && isCycleApplicable(user.lifePhase);
 
   return (
     <Screen>
@@ -167,6 +172,8 @@ export default function TodayScreen() {
         ) : null}
       </View>
 
+      {showCycleCard ? <CycleCard analysis={result?.cycleAnalysis ?? null} /> : null}
+
       <View style={styles.card}>
         <Subtitle>Peso de hoy</Subtitle>
         <Field
@@ -214,14 +221,14 @@ export default function TodayScreen() {
         )}
       </View>
 
-      {calibration && copy ? (
+      {result && copy ? (
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Subtitle>TDEE estimado</Subtitle>
             <Text
               style={[
                 styles.confidenceBadge,
-                calibration.method === 'bayesian'
+                result.calibration.method === 'bayesian'
                   ? styles.confidenceBayesian
                   : styles.confidencePrior,
               ]}
@@ -230,17 +237,23 @@ export default function TodayScreen() {
             </Text>
           </View>
           <Body>
-            <Text style={styles.bold}>~{Math.round(calibration.mean)} kcal/día</Text>
+            <Text style={styles.bold}>~{Math.round(result.effectiveTDEE)} kcal/día</Text>
           </Body>
           <Body>
-            Rango probable (80%): {Math.round(calibration.ciLow)} – {Math.round(calibration.ciHigh)}{' '}
-            kcal/día
+            Rango probable (80%): {Math.round(result.effectiveCiLow)} –{' '}
+            {Math.round(result.effectiveCiHigh)} kcal/día
           </Body>
           <Hint>{copy.detail}</Hint>
-          {calibration.method === 'bayesian' ? (
+          {result.phaseAdjustment > 0 ? (
             <Hint>
-              Observaciones efectivas: {calibration.effectiveN.toFixed(1)} (las más recientes pesan
-              más).
+              Ajustado +{Math.round(result.phaseAdjustment * 100)}% sobre tu TDEE base por estar en
+              fase lútea (base: ~{Math.round(result.calibration.mean)} kcal/día).
+            </Hint>
+          ) : null}
+          {result.calibration.method === 'bayesian' ? (
+            <Hint>
+              Observaciones efectivas: {result.calibration.effectiveN.toFixed(1)} (las más recientes
+              pesan más).
             </Hint>
           ) : null}
         </View>

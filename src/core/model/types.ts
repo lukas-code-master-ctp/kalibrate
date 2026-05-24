@@ -12,13 +12,8 @@ export type LifePhase =
   | 'perimenopause'
   | 'menopause';
 
-export type CyclePhase =
-  | 'menstruation'
-  | 'follicular'
-  | 'ovulation'
-  | 'luteal_early'
-  | 'luteal_premenstrual'
-  | 'late_or_uncertain';
+// CyclePhase ahora vive en cycle.ts (canonical home).
+export type { CyclePhase } from './cycle';
 
 export type ConfidenceLabel = 'calibrating' | 'low' | 'medium' | 'high';
 

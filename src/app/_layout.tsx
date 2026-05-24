@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useCycleStore } from '@/stores/cycle';
 import { useFoodStore } from '@/stores/food';
 import { useUserStore } from '@/stores/user';
 import { useWeightStore } from '@/stores/weight';
@@ -13,12 +14,14 @@ export default function RootLayout() {
   const isUserLoaded = useUserStore((s) => s.isLoaded);
   const loadWeights = useWeightStore((s) => s.loadLogs);
   const loadFood = useFoodStore((s) => s.loadEntries);
+  const loadCycle = useCycleStore((s) => s.loadEvents);
 
   useEffect(() => {
     void loadUser();
     void loadWeights();
     void loadFood();
-  }, [loadUser, loadWeights, loadFood]);
+    void loadCycle();
+  }, [loadUser, loadWeights, loadFood, loadCycle]);
 
   if (!isUserLoaded) {
     return (
@@ -45,6 +48,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="food/add" options={{ headerShown: true, presentation: 'modal' }} />
+        <Stack.Screen name="cycle/log" options={{ headerShown: true, presentation: 'modal' }} />
       </Stack>
     </SafeAreaProvider>
   );
