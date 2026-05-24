@@ -8,9 +8,11 @@ import { selectTodayEntries, selectTodayTotals, useFoodStore } from '@/stores/fo
 import { useUserStore } from '@/stores/user';
 import { selectLatestRaw, selectLatestSmoothed, useWeightStore } from '@/stores/weight';
 import { Body, Button, Field, Hint, Screen, Subtitle, Title } from '@/ui/components';
+import { AlertBanner } from '@/ui/alertBanner';
 import { CycleCard } from '@/ui/cycleCard';
 import { FoodEntryRow, FoodListEmpty } from '@/ui/foodList';
 import { WeeklyStatusBanner } from '@/ui/weeklyStatusBanner';
+import { useAlerts } from '@/hooks/useAlerts';
 import { useWeeklyStatus } from '@/hooks/useWeeklyStatus';
 import { goalRepo } from '@/data/repos';
 import { colors, fontSizes, radii, spacing } from '@/ui/theme';
@@ -67,6 +69,7 @@ export default function TodayScreen() {
   const deleteEntry = useFoodStore((s) => s.deleteEntry);
   const result = useCalibration();
   const weeklyEvaluation = useWeeklyStatus();
+  const alerts = useAlerts();
   const bandKg = useWeightStore((s) => s.smoothing.historicalSdKg);
 
   const todayLogs = useMemo(
@@ -153,6 +156,52 @@ export default function TodayScreen() {
   return (
     <Screen>
       <Title>Hoy</Title>
+
+      {alerts.redS && alerts.redS.risk === 'high' ? (
+        <AlertBanner
+          severity="danger"
+          title="Riesgo alto de RED-S"
+          body="El déficit propuesto combinado con tu perfil aumenta el riesgo de disrupción hormonal, pérdida ósea y caída de tiroides."
+          bullets={alerts.redS.reasons}
+          advice={alerts.redS.advice ?? undefined}
+        />
+      ) : alerts.redS && alerts.redS.risk === 'medium' ? (
+        <AlertBanner
+          severity="warning"
+          title="Atención: posible RED-S"
+          body="Algunos factores combinados sugieren acercarte al umbral de disponibilidad energética baja."
+          bullets={alerts.redS.reasons}
+          advice={alerts.redS.advice ?? undefined}
+        />
+      ) : null}
+
+      {alerts.dietBreak && alerts.dietBreak.urgency === 'urgent' ? (
+        <AlertBanner
+          severity="warning"
+          title="Diet break sugerido"
+          body={alerts.dietBreak.reason ?? ''}
+          advice={alerts.dietBreak.recommendation ?? undefined}
+        />
+      ) : alerts.dietBreak && alerts.dietBreak.urgency === 'suggested' ? (
+        <AlertBanner
+          severity="info"
+          title="Considera un diet break"
+          body={alerts.dietBreak.reason ?? ''}
+          advice={alerts.dietBreak.recommendation ?? undefined}
+        />
+      ) : null}
+
+      {alerts.adaptation?.detected ? (
+        <AlertBanner
+          severity={alerts.adaptation.direction === 'tdee_overestimated' ? 'warning' : 'info'}
+          title={
+            alerts.adaptation.direction === 'tdee_overestimated'
+              ? 'Posible adaptación metabólica'
+              : 'Cambio detectado en el modelo'
+          }
+          body={alerts.adaptation.message ?? ''}
+        />
+      ) : null}
 
       {weeklyEvaluation ? <WeeklyStatusBanner evaluation={weeklyEvaluation} /> : null}
 
