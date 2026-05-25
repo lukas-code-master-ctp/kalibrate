@@ -49,6 +49,7 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="food/add" options={{ headerShown: true, presentation: 'modal' }} />
         <Stack.Screen name="cycle/log" options={{ headerShown: true, presentation: 'modal' }} />
+        <Stack.Screen name="weight/history" options={{ headerShown: true }} />
       </Stack>
     </SafeAreaProvider>
   );

@@ -50,6 +50,7 @@ export interface WeightLogRepo {
   /** Mediciones de un día específico (00:00 a 23:59 en local). */
   listForDay(date: Date): Promise<readonly StoredWeightLog[]>;
   add(input: CreateWeightLogInput): Promise<StoredWeightLog>;
+  update(id: string, patch: Partial<CreateWeightLogInput>): Promise<StoredWeightLog | null>;
   delete(id: string): Promise<void>;
 }
 

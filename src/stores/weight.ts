@@ -19,6 +19,7 @@ interface WeightState {
 
   loadLogs: () => Promise<void>;
   addLog: (loggedAt: Date, weightKg: number, note?: string) => Promise<void>;
+  updateLog: (id: string, patch: { loggedAt?: Date; weightKg?: number }) => Promise<void>;
   deleteLog: (id: string) => Promise<void>;
 }
 
@@ -45,6 +46,12 @@ export const useWeightStore = create<WeightState>((set, get) => ({
 
   async addLog(loggedAt, weightKg, note) {
     await weightLogRepo.add({ loggedAt, weightKg, note });
+    const logs = await weightLogRepo.listAll();
+    set({ logs, smoothing: computeSmoothing(logs) });
+  },
+
+  async updateLog(id, patch) {
+    await weightLogRepo.update(id, patch);
     const logs = await weightLogRepo.listAll();
     set({ logs, smoothing: computeSmoothing(logs) });
   },

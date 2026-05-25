@@ -63,6 +63,16 @@ export const localWeightLogRepo: WeightLogRepo = {
     return log;
   },
 
+  async update(id, patch) {
+    const all = await readAll();
+    const idx = all.findIndex((l) => l.id === id);
+    if (idx === -1) return null;
+    const updated: StoredWeightLog = { ...all[idx]!, ...patch };
+    all[idx] = updated;
+    await writeAll(all);
+    return updated;
+  },
+
   async delete(id) {
     const all = await readAll();
     await writeAll(all.filter((log) => log.id !== id));

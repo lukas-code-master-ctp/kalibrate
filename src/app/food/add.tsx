@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import type { FoodCatalogItem, MealType } from '@/core/model/food';
 import { macrosForServing } from '@/core/model/food';
+import { frequentMeals, type FrequentMeal } from '@/core/model/frequentMeals';
 import { useFoodStore } from '@/stores/food';
 import { searchFoods } from '@/services/foodSearch';
 import { Body, Button, Field, Hint, OptionGroup, Screen, Subtitle } from '@/ui/components';
 import { colors, fontSizes, radii, spacing } from '@/ui/theme';
 
-type Mode = 'search' | 'manual';
+type Mode = 'frequent' | 'search' | 'manual';
 
 const MEAL_OPTIONS: { value: MealType; label: string }[] = [
   { value: 'breakfast', label: 'Desayuno' },
@@ -33,43 +34,103 @@ function guessMealFromHour(): MealType {
   return 'snack';
 }
 
+type WhenChoice = 'now' | 'yesterday' | 'custom';
+
+const ISO_DT_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+
+function isoDateTime(d: Date): string {
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${date} ${time}`;
+}
+
+function parseCustomDateTime(s: string, now: Date): Date | null {
+  if (!ISO_DT_RE.test(s)) return null;
+  const date = new Date(s.replace(' ', 'T') + ':00');
+  if (Number.isNaN(date.getTime())) return null;
+  if (date > now) return null;
+  if (now.getTime() - date.getTime() > 30 * 24 * 3600 * 1000) return null;
+  return date;
+}
+
 export default function AddFoodScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: Mode }>();
   const addEntry = useFoodStore((s) => s.addEntry);
+  const entries = useFoodStore((s) => s.entries);
 
-  const [mode, setMode] = useState<Mode>(params.mode === 'manual' ? 'manual' : 'search');
+  const frequents = useMemo(() => frequentMeals(entries, 6), [entries]);
+  const hasFrequents = frequents.length > 0;
+
+  const initialMode: Mode =
+    params.mode === 'manual' ? 'manual' : hasFrequents ? 'frequent' : 'search';
+
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [mealType, setMealType] = useState<MealType>(guessMealFromHour());
+  const [when, setWhen] = useState<WhenChoice>('now');
+  const [customWhen, setCustomWhen] = useState(isoDateTime(new Date()));
+
+  const consumedAt = useMemo(() => {
+    const now = new Date();
+    if (when === 'now') return now;
+    if (when === 'yesterday') {
+      return new Date(now.getTime() - 24 * 3600 * 1000);
+    }
+    return parseCustomDateTime(customWhen, now);
+  }, [when, customWhen]);
+
+  const consumedAtValid = consumedAt !== null;
+
+  async function handleAdded(
+    input: Parameters<ReturnType<typeof useFoodStore.getState>['addEntry']>[0],
+  ) {
+    if (!consumedAt) return;
+    await addEntry({ ...input, consumedAt });
+    router.back();
+  }
 
   return (
     <>
       <Stack.Screen options={{ title: 'Agregar comida' }} />
       <Screen>
         <View style={styles.modeRow}>
-          <Pressable
-            onPress={() => setMode('search')}
-            style={({ pressed }) => [
-              styles.modeChip,
-              mode === 'search' && styles.modeChipActive,
-              pressed && styles.modeChipPressed,
-            ]}
-          >
-            <Text style={[styles.modeLabel, mode === 'search' && styles.modeLabelActive]}>
-              Buscar
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setMode('manual')}
-            style={({ pressed }) => [
-              styles.modeChip,
-              mode === 'manual' && styles.modeChipActive,
-              pressed && styles.modeChipPressed,
-            ]}
-          >
-            <Text style={[styles.modeLabel, mode === 'manual' && styles.modeLabelActive]}>
-              Manual
-            </Text>
-          </Pressable>
+          <ModeChip
+            label="Frecuentes"
+            active={mode === 'frequent'}
+            onPress={() => setMode('frequent')}
+          />
+          <ModeChip label="Buscar" active={mode === 'search'} onPress={() => setMode('search')} />
+          <ModeChip label="Manual" active={mode === 'manual'} onPress={() => setMode('manual')} />
+        </View>
+
+        <View style={styles.whenBlock}>
+          <Subtitle>Cuándo</Subtitle>
+          <View style={styles.whenRow}>
+            <WhenChip label="Ahora" active={when === 'now'} onPress={() => setWhen('now')} />
+            <WhenChip
+              label="Ayer"
+              active={when === 'yesterday'}
+              onPress={() => setWhen('yesterday')}
+            />
+            <WhenChip label="Otra" active={when === 'custom'} onPress={() => setWhen('custom')} />
+          </View>
+          {when === 'custom' ? (
+            <Field
+              label=""
+              placeholder="AAAA-MM-DD HH:MM"
+              value={customWhen}
+              onChangeText={setCustomWhen}
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+              error={
+                customWhen.length > 0 && consumedAt === null
+                  ? 'Formato AAAA-MM-DD HH:MM, dentro de los últimos 30 días'
+                  : undefined
+              }
+            />
+          ) : (
+            <Hint>{when === 'yesterday' ? 'Ayer a esta hora.' : 'Ahora mismo.'}</Hint>
+          )}
         </View>
 
         <OptionGroup<MealType>
@@ -79,36 +140,146 @@ export default function AddFoodScreen() {
           onChange={setMealType}
         />
 
-        {mode === 'search' ? (
-          <SearchMode
+        {mode === 'frequent' ? (
+          <FrequentMode
+            frequents={frequents}
             mealType={mealType}
-            onAdded={async (input) => {
-              await addEntry(input);
-              router.back();
-            }}
+            consumedAtValid={consumedAtValid}
+            onAdded={handleAdded}
+            onEmptyHint={() => setMode('search')}
           />
+        ) : mode === 'search' ? (
+          <SearchMode mealType={mealType} consumedAtValid={consumedAtValid} onAdded={handleAdded} />
         ) : (
-          <ManualMode
-            mealType={mealType}
-            onAdded={async (input) => {
-              await addEntry(input);
-              router.back();
-            }}
-          />
+          <ManualMode mealType={mealType} consumedAtValid={consumedAtValid} onAdded={handleAdded} />
         )}
       </Screen>
     </>
   );
 }
 
+function ModeChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.modeChip,
+        active && styles.modeChipActive,
+        pressed && styles.modeChipPressed,
+      ]}
+    >
+      <Text style={[styles.modeLabel, active && styles.modeLabelActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function WhenChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.whenChip,
+        active && styles.whenChipActive,
+        pressed && styles.whenChipPressed,
+      ]}
+    >
+      <Text style={[styles.whenLabel, active && styles.whenLabelActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 interface ModeProps {
   mealType: MealType;
+  consumedAtValid: boolean;
   onAdded: (
     input: Parameters<ReturnType<typeof useFoodStore.getState>['addEntry']>[0],
   ) => Promise<void>;
 }
 
-function SearchMode({ mealType, onAdded }: ModeProps) {
+function FrequentMode({
+  frequents,
+  mealType,
+  consumedAtValid,
+  onAdded,
+  onEmptyHint,
+}: ModeProps & {
+  frequents: readonly FrequentMeal[];
+  onEmptyHint: () => void;
+}) {
+  if (frequents.length === 0) {
+    return (
+      <View>
+        <Hint>
+          Todavía no tenemos comidas frecuentes. Después de usar el modo Buscar o Manual unas veces,
+          vas a verlas acá para un toque.
+        </Hint>
+        <View style={{ height: spacing.md }} />
+        <Button label="Ir a Buscar" variant="secondary" onPress={onEmptyHint} />
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <Hint>Tus comidas más usadas en los últimos 60 días. Un toque para agregarlas.</Hint>
+      <View style={{ height: spacing.sm }} />
+      {frequents.map((m) => (
+        <Pressable
+          key={m.key}
+          disabled={!consumedAtValid}
+          onPress={() => {
+            void onAdded({
+              consumedAt: new Date(),
+              mealType,
+              name: m.name,
+              brand: m.brand,
+              amountGrams: m.amountGrams,
+              kcal: m.kcal,
+              proteinG: m.proteinG,
+              carbsG: m.carbsG,
+              fatG: m.fatG,
+              fiberG: m.fiberG,
+              source: 'saved',
+              confidence: m.source === 'manual' ? 'medium' : 'high',
+              containsAlcohol: m.containsAlcohol,
+            });
+          }}
+          style={({ pressed }) => [
+            styles.freqRow,
+            pressed && styles.freqRowPressed,
+            !consumedAtValid && { opacity: 0.4 },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.freqName}>{m.name}</Text>
+            <Text style={styles.freqMeta}>
+              {Math.round(m.kcal)} kcal · {m.proteinG.toFixed(1)}g prot · usado {m.useCount}×
+            </Text>
+          </View>
+          <Text style={styles.freqAdd}>+</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function SearchMode({ mealType, consumedAtValid, onAdded }: ModeProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FoodCatalogItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -153,6 +324,7 @@ function SearchMode({ mealType, onAdded }: ModeProps) {
       <PortionEditor
         item={selected}
         mealType={mealType}
+        consumedAtValid={consumedAtValid}
         onCancel={() => setSelected(null)}
         onSave={onAdded}
       />
@@ -211,11 +383,13 @@ function SearchMode({ mealType, onAdded }: ModeProps) {
 function PortionEditor({
   item,
   mealType,
+  consumedAtValid,
   onCancel,
   onSave,
 }: {
   item: FoodCatalogItem;
   mealType: MealType;
+  consumedAtValid: boolean;
   onCancel: () => void;
   onSave: ModeProps['onAdded'];
 }) {
@@ -296,14 +470,14 @@ function PortionEditor({
         </View>
       ) : null}
 
-      <Button label="Guardar" onPress={save} disabled={!grams || saving} />
+      <Button label="Guardar" onPress={save} disabled={!grams || saving || !consumedAtValid} />
       <View style={{ height: spacing.sm }} />
       <Button label="Volver a buscar" variant="ghost" onPress={onCancel} />
     </View>
   );
 }
 
-function ManualMode({ mealType, onAdded }: ModeProps) {
+function ManualMode({ mealType, consumedAtValid, onAdded }: ModeProps) {
   const [name, setName] = useState('');
   const [kcalStr, setKcalStr] = useState('');
   const [proteinStr, setProteinStr] = useState('');
@@ -332,7 +506,12 @@ function ManualMode({ mealType, onAdded }: ModeProps) {
   }, [fatStr]);
 
   const canSave =
-    name.trim().length > 0 && kcal !== null && protein !== null && carbs !== null && fat !== null;
+    name.trim().length > 0 &&
+    kcal !== null &&
+    protein !== null &&
+    carbs !== null &&
+    fat !== null &&
+    consumedAtValid;
 
   async function save() {
     if (!canSave || kcal === null || protein === null) return;
@@ -447,6 +626,67 @@ const styles = StyleSheet.create({
   },
   modeLabelActive: {
     color: colors.primary,
+  },
+  whenBlock: {
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  whenRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  whenChip: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  whenChipPressed: {
+    backgroundColor: colors.bgMuted,
+  },
+  whenChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: '#EFF6FF',
+  },
+  whenLabel: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  whenLabelActive: {
+    color: colors.primary,
+  },
+  freqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
+    marginBottom: spacing.sm,
+  },
+  freqRowPressed: {
+    backgroundColor: colors.bgMuted,
+  },
+  freqName: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  freqMeta: {
+    fontSize: fontSizes.sm,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  freqAdd: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: colors.primary,
+    paddingHorizontal: spacing.sm,
   },
   resultRow: {
     paddingVertical: spacing.md,
