@@ -10,8 +10,10 @@ import { detectAdaptation, type AdaptationAssessment } from '@/core/model/adapta
 import { buildObservations } from '@/core/model/observations';
 import { assessRedSRisk, type RedSRiskAssessment } from '@/core/model/redSRisk';
 import { suggestDietBreak, type DietBreakSuggestion } from '@/core/model/dietBreak';
+import { summarizeWeek } from '@/core/model/training';
 import { goalRepo } from '@/data/repos';
 import { useFoodStore } from '@/stores/food';
+import { useTrainingStore } from '@/stores/training';
 import { useUserStore } from '@/stores/user';
 import { useWeightStore } from '@/stores/weight';
 import { useCalibration } from './useCalibration';
@@ -32,6 +34,7 @@ export function useAlerts(): AlertsState {
   const user = useUserStore((s) => s.user);
   const entries = useFoodStore((s) => s.entries);
   const smoothingPoints = useWeightStore((s) => s.smoothing.points);
+  const trainingSessions = useTrainingStore((s) => s.sessions);
   const result = useCalibration();
   const [goal, setGoal] = useState<GoalSummary>({
     startedOn: null,
@@ -56,10 +59,11 @@ export function useAlerts(): AlertsState {
     }
 
     const heightM = user.heightCm / 100;
-    const weight = result.calibration.prior.bmr; // fallback, no usado
     const latestWeight =
       smoothingPoints[smoothingPoints.length - 1]?.smoothedKg ?? user.initialWeightKg;
     const bmi = latestWeight / (heightM * heightM);
+
+    const weekly = summarizeWeek(trainingSessions);
 
     const redS = assessRedSRisk({
       sex: user.biologicalSex,
@@ -69,6 +73,8 @@ export function useAlerts(): AlertsState {
       goalStartedOn: goal.startedOn,
       bodyFatPct: user.bodyFatPct,
       bmi,
+      weeklyTrainingMin: trainingSessions.length > 0 ? weekly.totalMinutes : undefined,
+      hasHighIntensityTraining: trainingSessions.length > 0 ? weekly.hasHighIntensity : undefined,
     });
 
     const observations = buildObservations(smoothingPoints, entries);

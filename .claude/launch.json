@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Expo Web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["expo", "start", "--web", "--port", "8082"],
+      "port": 8082
+    },
+    {
+      "name": "Expo Mobile (Metro)",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["start"],
+      "port": 8081
+    }
+  ]
+}

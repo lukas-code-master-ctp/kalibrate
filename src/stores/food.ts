@@ -1,9 +1,13 @@
 /**
- * Store de food entries con agregaciones derivadas para hoy.
+ * Store de food entries.
+ *
+ * Las agregaciones derivadas (today, totals, etc.) se hacen en componentes
+ * con useMemo, no en selectors de Zustand. Razón: con React 19 +
+ * useSyncExternalStore, un selector que retorna nuevos arrays/objetos en
+ * cada llamada (ej: `s.entries.filter(...)`) provoca loops de re-render.
  */
 
 import { create } from 'zustand';
-import { aggregateTotals, type DailyTotals } from '@/core/model/aggregation';
 import type { FoodEntry } from '@/core/model/food';
 import { foodEntryRepo, type CreateFoodEntryInput } from '@/data/repos';
 
@@ -40,20 +44,3 @@ export const useFoodStore = create<FoodState>((set) => ({
     set({ entries });
   },
 }));
-
-function sameLocalDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-export function selectTodayEntries(s: FoodState): readonly FoodEntry[] {
-  const today = new Date();
-  return s.entries.filter((e) => sameLocalDay(e.consumedAt, today));
-}
-
-export function selectTodayTotals(s: FoodState): DailyTotals {
-  return aggregateTotals(selectTodayEntries(s));
-}

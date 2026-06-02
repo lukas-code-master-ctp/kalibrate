@@ -34,6 +34,10 @@ export interface RedSRiskInput {
   bodyFatPct?: number;
   /** BMI calculado. */
   bmi?: number;
+  /** Total minutos de entrenamiento en los últimos 7 días, si se trackea. */
+  weeklyTrainingMin?: number;
+  /** True si hubo al menos una sesión de alta intensidad esta semana. */
+  hasHighIntensityTraining?: boolean;
   now?: Date;
 }
 
@@ -105,6 +109,18 @@ export function assessRedSRisk(input: RedSRiskInput): RedSRiskAssessment {
   if (input.bmi !== undefined && input.bmi < 18.5) {
     score += 2;
     reasons.push(`BMI bajo (${input.bmi.toFixed(1)}).`);
+  }
+
+  // Entrenamiento real (brief: >300 min/sem OR alta intensidad suman score).
+  if (input.weeklyTrainingMin !== undefined && input.weeklyTrainingMin > 300) {
+    score += 1;
+    reasons.push(
+      `${input.weeklyTrainingMin} min de entrenamiento esta semana (>300 aumenta la demanda energética).`,
+    );
+  }
+  if (input.hasHighIntensityTraining) {
+    score += 1;
+    reasons.push('Entrenamiento de alta intensidad esta semana.');
   }
 
   const risk: RedSRisk = score >= 4 ? 'high' : score >= 2 ? 'medium' : 'low';

@@ -1,19 +1,25 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
-import { suggestedDailyIntake, suggestedDailyProteinG } from '@/core/model/aggregation';
+import {
+  aggregateTotals,
+  suggestedDailyIntake,
+  suggestedDailyProteinG,
+} from '@/core/model/aggregation';
 import { isCycleApplicable } from '@/core/model/cycle';
 import { useCalibration, calibrationCopy } from '@/hooks/useCalibration';
-import { selectTodayEntries, selectTodayTotals, useFoodStore } from '@/stores/food';
+import { useFoodStore } from '@/stores/food';
 import { useUserStore } from '@/stores/user';
 import { selectLatestRaw, selectLatestSmoothed, useWeightStore } from '@/stores/weight';
 import { Body, Button, Field, Hint, Screen, Subtitle, Title } from '@/ui/components';
 import { AlertBanner } from '@/ui/alertBanner';
 import { CycleCard } from '@/ui/cycleCard';
 import { FoodEntryRow, FoodListEmpty } from '@/ui/foodList';
+import { TrainingListEmpty, TrainingRow } from '@/ui/trainingList';
 import { WeeklyStatusBanner } from '@/ui/weeklyStatusBanner';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useWeeklyStatus } from '@/hooks/useWeeklyStatus';
+import { useTrainingStore } from '@/stores/training';
 import { goalRepo } from '@/data/repos';
 import { colors, fontSizes, radii, spacing } from '@/ui/theme';
 
@@ -64,9 +70,28 @@ export default function TodayScreen() {
   const latestSmoothed = useWeightStore(selectLatestSmoothed);
   const latestRaw = useWeightStore(selectLatestRaw);
   const allLogs = useWeightStore((s) => s.logs);
-  const todayEntries = useFoodStore(selectTodayEntries);
-  const todayTotals = useFoodStore(selectTodayTotals);
+  const allEntries = useFoodStore((s) => s.entries);
   const deleteEntry = useFoodStore((s) => s.deleteEntry);
+  const allSessions = useTrainingStore((s) => s.sessions);
+  const deleteSession = useTrainingStore((s) => s.deleteSession);
+
+  const todayEntries = useMemo(
+    () => allEntries.filter((e) => sameLocalDay(e.consumedAt, new Date())),
+    [allEntries],
+  );
+  const todayTotals = useMemo(() => aggregateTotals(todayEntries), [todayEntries]);
+  const todaySessions = useMemo(
+    () => allSessions.filter((s) => sameLocalDay(s.occurredAt, new Date())),
+    [allSessions],
+  );
+  const todayTrainingMin = useMemo(
+    () => todaySessions.reduce((s, x) => s + x.durationMin, 0),
+    [todaySessions],
+  );
+  const hasNewProgramSession = useMemo(
+    () => todaySessions.some((s) => s.isNewProgram),
+    [todaySessions],
+  );
   const result = useCalibration();
   const weeklyEvaluation = useWeeklyStatus();
   const alerts = useAlerts();
@@ -138,6 +163,19 @@ export default function TodayScreen() {
         style: 'destructive',
         onPress: () => {
           void deleteEntry(id);
+        },
+      },
+    ]);
+  }
+
+  function confirmDeleteSession(id: string) {
+    Alert.alert('Eliminar sesión', '¿Eliminar esta sesión de entrenamiento?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => {
+          void deleteSession(id);
         },
       },
     ]);
@@ -248,6 +286,36 @@ export default function TodayScreen() {
             {proteinRemaining > 0 ? proteinRemaining : 0}g de proteína para tu objetivo del día.
             {kcalRemaining < -100
               ? ` (Hoy te pasaste por ~${-kcalRemaining} kcal — normal, la ventana semanal es lo que importa.)`
+              : ''}
+          </Hint>
+        ) : null}
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Subtitle>Entrenamiento</Subtitle>
+          <Button
+            label="+ Agregar"
+            onPress={() => router.push('/training/add')}
+            style={styles.smallBtn}
+          />
+        </View>
+
+        {todaySessions.length === 0 ? (
+          <TrainingListEmpty />
+        ) : (
+          <View style={styles.list}>
+            {todaySessions.map((s) => (
+              <TrainingRow key={s.id} session={s} onDelete={confirmDeleteSession} />
+            ))}
+          </View>
+        )}
+
+        {todayTrainingMin > 0 ? (
+          <Hint>
+            {todayTrainingMin} min de entrenamiento hoy
+            {hasNewProgramSession
+              ? ' · 🆕 Estás en un programa nuevo: si el peso sube 1-2 kg en las primeras semanas es agua y glucógeno muscular, no grasa.'
               : ''}
           </Hint>
         ) : null}

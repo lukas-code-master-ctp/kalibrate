@@ -4,19 +4,15 @@ import { View } from 'react-native';
 import type { BiologicalSex } from '@/core/model/types';
 import { useOnboardingStore } from '@/stores/onboarding';
 import { BottomBar, Button, Field, Hint, OptionGroup, Screen, Title } from '@/ui/components';
+import { DateField } from '@/ui/dateField';
 import { spacing } from '@/ui/theme';
 
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
 
-function parseBirthDate(input: string): Date | null {
-  if (!ISO_DATE_RE.test(input)) return null;
-  const date = new Date(input + 'T00:00:00');
-  if (Number.isNaN(date.getTime())) return null;
-  const now = new Date();
-  if (date > now) return null;
-  const ageYears = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  if (ageYears < 13 || ageYears > 110) return null;
-  return date;
+function isValidBirthDate(d: Date, now: Date = new Date()): boolean {
+  if (d > now) return false;
+  const ageYears = (now.getTime() - d.getTime()) / MS_PER_YEAR;
+  return ageYears >= 13 && ageYears <= 110;
 }
 
 export default function BasicsScreen() {
@@ -25,25 +21,36 @@ export default function BasicsScreen() {
   const setDraft = useOnboardingStore((s) => s.setDraft);
 
   const [sex, setSex] = useState<BiologicalSex | undefined>(draft.biologicalSex);
-  const [birthDateStr, setBirthDateStr] = useState(
-    draft.birthDate ? draft.birthDate.toISOString().slice(0, 10) : '',
-  );
+  const [birthDate, setBirthDate] = useState<Date | null>(draft.birthDate ?? null);
   const [heightStr, setHeightStr] = useState(draft.heightCm?.toString() ?? '');
 
-  const birthDateParsed = useMemo(() => parseBirthDate(birthDateStr), [birthDateStr]);
+  const now = new Date();
+  const maxBirthDate = useMemo(() => {
+    const d = new Date(now);
+    d.setFullYear(d.getFullYear() - 13);
+    return d;
+  }, [now.getFullYear()]);
+  const minBirthDate = useMemo(() => {
+    const d = new Date(now);
+    d.setFullYear(d.getFullYear() - 110);
+    return d;
+  }, [now.getFullYear()]);
+
+  const birthDateValid = birthDate !== null && isValidBirthDate(birthDate, now);
+
   const heightParsed = useMemo(() => {
     const n = parseFloat(heightStr.replace(',', '.'));
     if (Number.isNaN(n) || n < 80 || n > 230) return null;
     return n;
   }, [heightStr]);
 
-  const canContinue = sex !== undefined && birthDateParsed !== null && heightParsed !== null;
+  const canContinue = sex !== undefined && birthDateValid && heightParsed !== null;
 
   function next() {
-    if (!canContinue) return;
+    if (!canContinue || !birthDate) return;
     setDraft({
       biologicalSex: sex,
-      birthDate: birthDateParsed,
+      birthDate,
       heightCm: heightParsed,
     });
     router.push('/onboarding/body');
@@ -69,15 +76,14 @@ export default function BasicsScreen() {
         onChange={setSex}
       />
 
-      <Field
+      <DateField
         label="Fecha de nacimiento"
-        placeholder="AAAA-MM-DD"
-        value={birthDateStr}
-        onChangeText={setBirthDateStr}
-        autoCapitalize="none"
-        keyboardType="numbers-and-punctuation"
-        hint="Formato AAAA-MM-DD, por ejemplo 1992-03-15."
-        error={birthDateStr.length > 0 && !birthDateParsed ? 'Fecha inválida' : undefined}
+        value={birthDate}
+        onChange={setBirthDate}
+        min={minBirthDate}
+        max={maxBirthDate}
+        hint="Tap para abrir el calendario."
+        error={birthDate !== null && !birthDateValid ? 'Edad fuera de rango (13-110)' : undefined}
       />
 
       <Field
